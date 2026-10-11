@@ -1,0 +1,10 @@
+# Сборочные артефакты wrangler
+.wrangler/
+node_modules/
+
+# Рабочие заметки процесса дизайна
+.impeccable/
+
+# Служебное
+*.log
+*.bak

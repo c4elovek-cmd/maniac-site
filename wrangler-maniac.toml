@@ -1,0 +1,8 @@
+name = "maniac-site"
+main = "worker/index.js"
+compatibility_date = "2026-09-04"
+compatibility_flags = ["nodejs_compat"]
+
+[assets]
+directory = "./deploy/maniac-site"
+binding = "ASSETS"

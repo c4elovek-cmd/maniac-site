@@ -1,0 +1,481 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Побег от маньяка 2 — сервер</title>
+<meta name="description" content="Мультиплеерный сервер карты «Побег от маньяка 2»: локация «Завод», Minecraft 1.21.3, ресурспак подставляется автоматически при входе.">
+<meta name="theme-color" content="#171614">
+
+<style>
+/* ── Шрифты: свои файлы, без внешних запросов ── */
+@font-face{font-family:"PT Sans Narrow";src:url("fonts/PTSansNarrow-400-cyrillic-ext.woff2") format("woff2");font-weight:400;font-display:swap;unicode-range:U+0460-052F,U+1C80-1C8A,U+20B4,U+2DE0,U+A640-A69F,U+FE2E-FE2F;}
+@font-face{font-family:"PT Sans Narrow";src:url("fonts/PTSansNarrow-400-cyrillic.woff2") format("woff2");font-weight:400;font-display:swap;unicode-range:U+0301,U+0400-045F,U+0490-0491,U+04B0-04B1,U+2116;}
+@font-face{font-family:"PT Sans Narrow";src:url("fonts/PTSansNarrow-400-latin.woff2") format("woff2");font-weight:400;font-display:swap;}
+@font-face{font-family:"PT Sans Narrow";src:url("fonts/PTSansNarrow-700-cyrillic-ext.woff2") format("woff2");font-weight:700;font-display:swap;unicode-range:U+0460-052F,U+1C80-1C8A,U+20B4,U+2DE0,U+A640-A69F,U+FE2E-FE2F;}
+@font-face{font-family:"PT Sans Narrow";src:url("fonts/PTSansNarrow-700-cyrillic.woff2") format("woff2");font-weight:700;font-display:swap;unicode-range:U+0301,U+0400-045F,U+0490-0491,U+04B0-04B1,U+2116;}
+@font-face{font-family:"PT Sans Narrow";src:url("fonts/PTSansNarrow-700-latin.woff2") format("woff2");font-weight:700;font-display:swap;}
+@font-face{font-family:"PT Mono";src:url("fonts/PTMono-400-cyrillic-ext.woff2") format("woff2");font-weight:400;font-display:swap;unicode-range:U+0460-052F,U+1C80-1C8A,U+20B4,U+2DE0,U+A640-A69F,U+FE2E-FE2F;}
+@font-face{font-family:"PT Mono";src:url("fonts/PTMono-400-cyrillic.woff2") format("woff2");font-weight:400;font-display:swap;unicode-range:U+0301,U+0400-045F,U+0490-0491,U+04B0-04B1,U+2116;}
+@font-face{font-family:"PT Mono";src:url("fonts/PTMono-400-latin.woff2") format("woff2");font-weight:400;font-display:swap;}
+
+/* ── Материал: окисленная сталь и щебень. Тона ступенями, без плавных переходов ── */
+:root{
+  --void:      #100f0e;
+  --ground:    #171614;
+  --panel:     #1e1c18;
+  --panel-lit: #26231e;
+  --ballast:   #2a2723;
+  --edge:      #38342d;
+  --edge-lit:  #4a453c;
+  --rust:      #6b5442;
+  --sodium:    #e8a33d;
+  --sodium-lo: #7d5a22;
+  --go:        #4bb15c;
+  --hold:      #e8a33d;
+  --stop:      #cf3a30;
+  --ink:       #e9e5dd;
+  --ink-soft:  #9d968b;
+  --ink-faint: #6d675e;
+  --unit: 8px;
+  --grid: 4;
+}
+
+*{box-sizing:border-box;margin:0;padding:0}
+html{color-scheme:dark;-webkit-text-size-adjust:100%}
+
+body{
+  min-height:100vh;
+  background-color:var(--ground);
+  color:var(--ink);
+  font-family:"PT Sans Narrow",system-ui,sans-serif;
+  font-size:17px;
+  line-height:1.5;
+  display:flex;
+  flex-direction:column;
+  overflow-x:hidden;
+  -webkit-font-smoothing:antialiased;
+}
+
+/* Щебень: дизеринг вместо градиента. Точечная сетка двух тонов, не размытие. */
+body::before{
+  content:"";
+  position:fixed; inset:0; z-index:0; pointer-events:none;
+  background-image:
+    radial-gradient(circle at 1px 1px, rgba(255,255,255,.030) 1px, transparent 1.6px),
+    radial-gradient(circle at 3px 3px, rgba(0,0,0,.16) 1px, transparent 1.6px);
+  background-size:4px 4px, 4px 4px;
+}
+
+/* Рельс: две стальные полосы, уходящие в перспективу под контентом */
+body::after{
+  content:"";
+  position:fixed; left:50%; bottom:0; z-index:0; pointer-events:none;
+  width:min(760px,120vw); height:52vh;
+  transform:translateX(-50%);
+  background:
+    linear-gradient(to right, transparent 0 12%, var(--rust) 12% 12.7%, transparent 12.7% 40%,
+                    var(--rust) 40% 41.4%, transparent 41.4% 58.6%,
+                    var(--rust) 58.6% 60%, transparent 60% 87.3%,
+                    var(--rust) 87.3% 88%, transparent 88% 100%);
+  opacity:.16;
+  mask-image:linear-gradient(to top, #000 0%, transparent 100%);
+  -webkit-mask-image:linear-gradient(to top, #000 0%, transparent 100%);
+}
+
+.shell{position:relative;z-index:1;width:100%;max-width:960px;margin:0 auto;padding:0 20px}
+main{flex:1}
+
+/* ── Фокус и выделение ── */
+::selection{background:var(--sodium);color:var(--void)}
+:focus-visible{outline:2px solid var(--sodium);outline-offset:3px}
+.sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;border:0}
+
+/* ── Шапка: служебная строка, как надпись на щитке ── */
+.masthead{
+  display:flex;align-items:center;gap:14px;
+  padding:22px 0 18px;
+  border-bottom:1px solid var(--edge);
+  font-family:"PT Mono",monospace;font-size:12px;letter-spacing:.16em;
+  text-transform:uppercase;color:var(--ink-faint);
+}
+.masthead__dot{
+  width:9px;height:9px;flex:0 0 auto;
+  background:var(--sodium);border:1px solid var(--sodium-lo);
+}
+.masthead__place{color:var(--ink-soft)}
+.masthead__rule{flex:1;height:1px;background:var(--edge);min-width:20px}
+.masthead__kind{white-space:nowrap}
+
+/* ── Табло: сервер одной строкой рейса ── */
+.board{padding:calc(var(--unit)*7) 0 calc(var(--unit)*5)}
+
+.board__title{
+  font-size:clamp(44px,11.5vw,104px);
+  line-height:.86;
+  font-weight:700;
+  letter-spacing:-.012em;
+  text-transform:uppercase;
+  color:var(--ink);
+  margin-bottom:calc(var(--unit)*2);
+  text-wrap:balance;
+}
+.board__title em{
+  display:block;font-style:normal;
+  color:var(--sodium);
+}
+
+.board__sub{
+  font-size:19px;color:var(--ink-soft);
+  max-width:46ch;margin-bottom:calc(var(--unit)*6);
+}
+
+/* Панель табло: стальная пластина с заклёпками по углам */
+.panel{
+  position:relative;
+  background-color:var(--panel);
+  border:1px solid var(--edge);
+  padding:calc(var(--unit)*4) calc(var(--unit)*4) calc(var(--unit)*4);
+}
+.panel::before{
+  content:"";position:absolute;inset:0;pointer-events:none;
+  border-top:1px solid var(--edge-lit);
+}
+/* Модульная сетка: колонки видны как настоящие ячейки табло */
+.row{
+  display:grid;
+  grid-template-columns:minmax(0,1fr) auto;
+  grid-template-areas:"signal copy" "addr copy" "players copy";
+  gap:calc(var(--unit)*1) calc(var(--unit)*3);
+  align-items:end;
+  padding:calc(var(--unit)*3) 0;
+  border-top:1px solid var(--edge);
+}
+.row:first-of-type{border-top:0;padding-top:0}
+
+.cell{display:flex;flex-direction:column;gap:6px;min-width:0}
+.cell__label{
+  font-family:"PT Mono",monospace;font-size:11px;letter-spacing:.14em;
+  text-transform:uppercase;color:var(--ink-faint);
+}
+.cell__value{
+  font-family:"PT Mono",monospace;font-size:clamp(18px,4.6vw,26px);
+  color:var(--ink);letter-spacing:-.01em;
+  overflow-wrap:anywhere;
+}
+
+/* Сигнальная лампа: состояние путя */
+.signal{grid-area:signal;flex-direction:row;align-items:center;gap:10px}
+.signal__lamp{
+  width:13px;height:13px;flex:0 0 auto;border-radius:50%;
+  background:var(--ink-faint);border:1px solid var(--void);
+  transition:background-color .45s ease, box-shadow .45s ease;
+}
+.signal__text{
+  font-family:"PT Mono",monospace;font-size:13px;
+  letter-spacing:.16em;text-transform:uppercase;color:var(--ink-soft);
+  transition:color .45s ease;
+}
+.is-online .signal__lamp{background:var(--go);box-shadow:0 0 0 3px rgba(75,177,92,.16),0 0 14px rgba(75,177,92,.5)}
+.is-online .signal__text{color:var(--go)}
+.is-busy   .signal__lamp{background:var(--hold);box-shadow:0 0 0 3px rgba(232,163,61,.16),0 0 14px rgba(232,163,61,.5)}
+.is-busy   .signal__text{color:var(--hold)}
+.is-down   .signal__lamp{background:var(--stop);box-shadow:0 0 0 3px rgba(207,58,48,.16),0 0 14px rgba(207,58,48,.45)}
+.is-down   .signal__text{color:var(--stop)}
+.is-unknown .signal__lamp{background:var(--ink-faint)}
+.is-unknown .signal__text{color:var(--ink-faint)}
+
+.cell--addr{grid-area:addr}
+.cell--addr .cell__value{color:var(--sodium)}
+.cell--players{grid-area:players}
+
+/* Перфорация билета: кнопка копирования */
+.copy{
+  grid-area:copy;align-self:center;
+  display:inline-flex;align-items:center;justify-content:center;gap:8px;
+  min-height:46px;padding:0 20px;
+  background:var(--sodium);color:var(--void);
+  border:1px solid var(--sodium);
+  border-radius:0;
+  font-family:"PT Mono",monospace;font-size:12px;font-weight:700;
+  letter-spacing:.12em;text-transform:uppercase;
+  cursor:pointer;
+  transition:transform .18s cubic-bezier(.16,1,.3,1), background-color .18s ease;
+  clip-path:polygon(0 0, calc(100% - 9px) 0, 100% 9px, 100% 100%, 9px 100%, 0 calc(100% - 9px));
+}
+.copy:hover{transform:translateY(-1px)}
+.copy:active{transform:translateY(0)}
+.copy[data-done="1"]{background:var(--go);border-color:var(--go)}
+
+/* Полная инверсия на смену сигнала — как переключение аспекта */
+.flip{animation:flip .34s steps(2,end)}
+@keyframes flip{0%{filter:invert(1)}100%{filter:invert(0)}}
+
+/* ── Секции ── */
+.section{padding:calc(var(--unit)*7) 0;border-top:1px solid var(--edge)}
+.section__head{
+  display:flex;align-items:baseline;gap:12px;margin-bottom:calc(var(--unit)*4);
+}
+.section__num{
+  font-family:"PT Mono",monospace;font-size:12px;color:var(--sodium);
+  letter-spacing:.1em;padding-top:4px;
+}
+.section__title{
+  font-size:clamp(26px,5.4vw,36px);font-weight:700;text-transform:uppercase;
+  letter-spacing:.005em;line-height:1;
+}
+
+.lede{font-size:19px;max-width:60ch;color:var(--ink)}
+.lede + .lede{margin-top:calc(var(--unit)*3)}
+
+.facts{
+  display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));
+  gap:1px;margin-top:calc(var(--unit)*5);
+  background:var(--edge);border:1px solid var(--edge);
+}
+.fact{background:var(--panel);padding:calc(var(--unit)*3)}
+.fact__label{
+  font-family:"PT Mono",monospace;font-size:11px;letter-spacing:.14em;
+  text-transform:uppercase;color:var(--ink-faint);margin-bottom:8px;
+}
+.fact__value{font-size:19px;color:var(--ink)}
+.fact__note{font-size:14px;color:var(--ink-soft);margin-top:6px}
+
+/* Шаги подключения */
+.steps{list-style:none;counter-reset:step}
+.step{
+  counter-increment:step;
+  display:grid;grid-template-columns:52px 1fr;gap:calc(var(--unit)*3);
+  padding:calc(var(--unit)*3) 0;border-top:1px solid var(--edge);
+  align-items:start;
+}
+.step:last-child{border-bottom:1px solid var(--edge)}
+.step::before{
+  content:counter(step,decimal-leading-zero);
+  font-family:"PT Mono",monospace;font-size:13px;color:var(--sodium);
+  padding-top:2px;
+}
+.step__title{font-size:20px;font-weight:700;margin-bottom:6px}
+.step__text{color:var(--ink-soft);max-width:56ch}
+.step__text code{
+  font-family:"PT Mono",monospace;font-size:.94em;
+  color:var(--sodium);background:var(--ballast);padding:2px 6px;
+  overflow-wrap:anywhere;
+}
+
+/* ── Подвал ── */
+.foot{
+  border-top:1px solid var(--edge);
+  padding:calc(var(--unit)*5) 0 calc(var(--unit)*7);
+  display:flex;flex-wrap:wrap;gap:calc(var(--unit)*3) calc(var(--unit)*6);
+  align-items:baseline;
+  font-size:14px;color:var(--ink-faint);
+}
+.foot__author{color:var(--ink-soft)}
+.foot a{color:var(--ink-soft);text-decoration:none;border-bottom:1px solid var(--edge-lit);transition:color .18s,border-color .18s}
+.foot a:hover{color:var(--sodium);border-color:var(--sodium-lo)}
+.foot__sep{color:var(--edge-lit)}
+
+@media (max-width:620px){
+  .panel{padding:calc(var(--unit)*3)}
+  .row{grid-template-areas:"signal copy" "addr copy" "players copy";gap:calc(var(--unit)*1) calc(var(--unit)*2)}
+  .copy{min-height:44px;padding:0 14px;font-size:11px}
+  .step{grid-template-columns:38px 1fr;gap:calc(var(--unit)*2)}
+  .masthead__kind{display:none}
+}
+@media (prefers-reduced-motion:reduce){
+  *{animation-duration:.001ms !important;transition-duration:.001ms !important}
+}
+</style>
+</head>
+<body>
+
+<header class="shell masthead">
+  <span class="masthead__dot" aria-hidden="true"></span>
+  <span class="masthead__place">Локация «Завод»</span>
+  <span class="masthead__rule" aria-hidden="true"></span>
+  <span class="masthead__kind">Рельсовый путь · тупик</span>
+</header>
+
+<main class="shell">
+
+  <!-- ── Табло: адрес, версия и состояние пути ── -->
+  <section class="board" aria-labelledby="t">
+    <h1 class="board__title" id="t">Побег<br>от маньяка <em>2</em></h1>
+    <p class="board__sub">Мультиплеерный сервер карты. Ищите предметы, открывайте двери, уходите от маньяка — и выбирайтесь одним из четырёх выходов.</p>
+
+    <div class="panel is-unknown" id="panel">
+      <div class="row">
+        <div class="cell signal">
+          <span class="signal__lamp" aria-hidden="true"></span>
+          <span class="signal__text" id="state">Проверяем путь</span>
+        </div>
+        <div class="cell cell--addr">
+          <span class="cell__label">Адрес для входа</span>
+          <span class="cell__value">maniak.c4elovek.online</span>
+        </div>
+        <div class="cell cell--players">
+          <span class="cell__label">Игроки на пути</span>
+          <span class="cell__value"><span id="online">—</span> / 20</span>
+        </div>
+        <button class="copy" id="copy" type="button">Скопировать адрес</button>
+      </div>
+    </div>
+
+    <!-- Точный машинно-читаемый близнец табло -->
+    <table class="sr-only">
+      <caption>Состояние сервера «Побег от маньяка 2»</caption>
+      <tbody>
+        <tr><th scope="row">Адрес</th><td>maniak.c4elovek.online</td></tr>
+        <tr><th scope="row">Версия</th><td>Minecraft 1.21.3</td></tr>
+        <tr><th scope="row">Состояние</th><td id="sr-state">проверяется</td></tr>
+        <tr><th scope="row">Игроки</th><td id="sr-players">неизвестно</td></tr>
+      </tbody>
+    </table>
+    <p class="sr-only" role="status" aria-live="polite" id="live"></p>
+  </section>
+
+  <!-- ── Что за рейс ── -->
+  <section class="section" aria-labelledby="a">
+    <div class="section__head">
+      <span class="section__num" aria-hidden="true">01</span>
+      <h2 class="section__title" id="a">О рейсе</h2>
+    </div>
+    <p class="lede">«Побег от маньяка 2» — продолжение первой части. Новая локация «Завод», четыре уникальных способа сбежать и случайная генерация предметов: в каждом заходе расстановка разная.</p>
+    <p class="lede">Маньяк не отдыхает. Топливо, ключи и коды разбросаны по цехам, а двери открываются не сразу. Успех здесь — не перестрелка, а успевший найти выход.</p>
+
+    <div class="facts">
+      <div class="fact">
+        <div class="fact__label">Версия</div>
+        <div class="fact__value">Minecraft 1.21.3</div>
+        <div class="fact__note">Старые версии не подойдут — сервер и ресурспак под 1.21.3</div>
+      </div>
+      <div class="fact">
+        <div class="fact__label">Способы побега</div>
+        <div class="fact__value">Четыре</div>
+        <div class="fact__note">Каждый требует своего набора предметов</div>
+      </div>
+      <div class="fact">
+        <div class="fact__label">Ресурспак</div>
+        <div class="fact__value">Приходит сам</div>
+        <div class="fact__note">Подставляется при входе, отдельно скачивать не нужно</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── Как подключиться ── -->
+  <section class="section" aria-labelledby="h">
+    <div class="section__head">
+      <span class="section__num" aria-hidden="true">02</span>
+      <h2 class="section__title" id="h">Как подключиться</h2>
+    </div>
+    <ol class="steps">
+      <li class="step">
+        <div>
+          <div class="step__title">Запустите Minecraft 1.21.3</div>
+          <p class="step__text">Версия должна совпадать с серверной. На другой версии карта не откроется.</p>
+        </div>
+      </li>
+      <li class="step">
+        <div>
+          <div class="step__title">Добавьте сервер</div>
+          <p class="step__text">В списке серверов нажмите «Добавить» и вставьте адрес: <code>maniak.c4elovek.online</code></p>
+        </div>
+      </li>
+      <li class="step">
+        <div>
+          <div class="step__title">Зайдите и примите ресурспак</div>
+          <p class="step__text">Сервер сам предложит загрузить набор текстур и моделей карты. Без него локация выглядит не той, какой задумана.</p>
+        </div>
+      </li>
+    </ol>
+  </section>
+
+</main>
+
+<footer class="shell foot">
+  <span class="foot__author">Карта и ресурспак — <a href="https://minecraft-inside.ru/maps/182258-pobeg-ot-manyaka-2.html" target="_blank" rel="noopener">BlueBerriesStudio</a></span>
+  <span class="foot__sep" aria-hidden="true">·</span>
+  <span>Сервер запущен вручную, статус может отставать</span>
+</footer>
+
+<script>
+(function () {
+  var panel   = document.getElementById('panel');
+  var state   = document.getElementById('state');
+  var online  = document.getElementById('online');
+  var srState = document.getElementById('sr-state');
+  var srPlay  = document.getElementById('sr-players');
+  var live    = document.getElementById('live');
+  var copyBtn = document.getElementById('copy');
+  var ADDR    = 'maniak.c4elovek.online';
+  var prev    = null;
+
+  function setSignal(kind, label) {
+    if (prev && prev !== kind && !matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      panel.classList.add('flip');
+      setTimeout(function () { panel.classList.remove('flip'); }, 340);
+    }
+    prev = kind;
+    panel.className = 'panel is-' + kind;
+    state.textContent = label;
+    srState.textContent = label;
+  }
+
+  function render(d) {
+    if (d && d.online) {
+      online.textContent = d.online_players;
+      srPlay.textContent = d.online_players + ' из ' + d.max_players;
+      var busy = d.online_players > 0;
+      setSignal(busy ? 'busy' : 'online', busy ? 'Путь занят' : 'Путь свободен');
+      live.textContent = 'Сервер отвечает. ' + d.online_players + ' из ' + d.max_players + ' игроков.';
+    } else {
+      online.textContent = '—';
+      srPlay.textContent = 'сервер не отвечает';
+      setSignal('down', 'Путь перекрыт');
+      live.textContent = 'Сервер не отвечает.';
+    }
+  }
+
+  function poll() {
+    fetch('/api/status', { cache: 'no-store' })
+      .then(function (r) { return r.json(); })
+      .then(render)
+      .catch(function () { render(null); });
+  }
+
+  copyBtn.addEventListener('click', function () {
+    var done = function () {
+      copyBtn.dataset.done = '1';
+      copyBtn.textContent = 'Скопировано';
+      setTimeout(function () {
+        copyBtn.dataset.done = '0';
+        copyBtn.textContent = 'Скопировать адрес';
+      }, 1800);
+    };
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(ADDR).then(done, function () { fallback(); done(); });
+    } else {
+      fallback(); done();
+    }
+  });
+
+  function fallback() {
+    var ta = document.createElement('textarea');
+    ta.value = ADDR;
+    ta.setAttribute('readonly', '');
+    ta.style.position = 'fixed';
+    ta.style.left = '-9999px';
+    document.body.appendChild(ta);
+    ta.select();
+    try { document.execCommand('copy'); } catch (e) {}
+    document.body.removeChild(ta);
+  }
+
+  poll();
+  setInterval(poll, 30000);
+})();
+</script>
+
+</body>
+</html>
